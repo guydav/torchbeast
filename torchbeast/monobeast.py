@@ -642,6 +642,8 @@ def create_env(flags):
             clip_rewards=False,
             frame_stack=True,
             scale=False,
+            # The masking environment handles grayscaling itself
+            grayscale='Masked' not in flags.env,
         )
     )
 

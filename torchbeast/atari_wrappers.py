@@ -297,7 +297,7 @@ def make_atari(env_id, max_episode_steps=None):
 
     return env
 
-def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, scale=False):
+def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, scale=False, grayscale=True):
     """Configure environment for DeepMind-style Atari.
     """
     if episode_life:
@@ -305,8 +305,6 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
 
-    # The masking environment handles grayscaling itself
-    grayscale = not isinstance(env, gym_masked_atari.envs.MaskedAtariEnv)
     env = WarpFrame(env, grayscale=grayscale)
     if scale:
         env = ScaledFloatFrame(env)
