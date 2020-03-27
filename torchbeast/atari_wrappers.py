@@ -306,7 +306,7 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
         env = FireResetEnv(env)
 
     # The masking environment handles grayscaling itself
-    grayscale = not isinstance(env, gym_masked_atari.gym_masked_atari.envs.MaskedAtariEnv)
+    grayscale = not isinstance(env, gym_masked_atari.envs.MaskedAtariEnv)
     env = WarpFrame(env, grayscale=grayscale)
     if scale:
         env = ScaledFloatFrame(env)
