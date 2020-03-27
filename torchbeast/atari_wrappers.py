@@ -304,7 +304,10 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
         env = EpisodicLifeEnv(env)
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
-    env = WarpFrame(env)
+
+    # The masking environment handles grayscaling itself
+    grayscale = not isinstance(env, gym_masked_atari.gym_masked_atari.envs.MaskedAtariEnv)
+    env = WarpFrame(env, grayscale=grayscale)
     if scale:
         env = ScaledFloatFrame(env)
     if clip_rewards:
