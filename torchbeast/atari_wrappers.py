@@ -195,11 +195,23 @@ class WarpFrame(gym.ObservationWrapper):
 
         if self._grayscale:
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-        frame = cv2.resize(
-            frame, (self._width, self._height), interpolation=cv2.INTER_AREA
-        )
-        if self._grayscale:
-            frame = np.expand_dims(frame, -1)
+
+        # If an augmented frame, resize one at a time
+        if frame.ndim == 3:
+            n_channels = frame.shape[-1]
+            resized_frame = np.empty((self._width, self._height, n_channels), dtype=frame.dtype)
+            for i in range(n_channels):
+                resized_frame[:, :, i] = cv2.resize(frame[:, :, i], (self._width, self._height), interpolation=cv2.INTER_AREA)
+
+            frame = resized_frame
+
+        else:
+            frame = cv2.resize(
+                frame, (self._width, self._height), interpolation=cv2.INTER_AREA
+            )
+
+            if self._grayscale:
+                frame = np.expand_dims(frame, -1)
 
         if self._key is None:
             obs = frame
