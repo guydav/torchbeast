@@ -21,6 +21,10 @@ import time
 import timeit
 import traceback
 import typing
+import sys
+
+import numpy as np
+import wandb
 
 os.environ["OMP_NUM_THREADS"] = "1"  # Necessary for multithreading.
 
@@ -91,6 +95,26 @@ parser.add_argument("--epsilon", default=0.01, type=float,
                     help="RMSProp epsilon.")
 parser.add_argument("--grad_norm_clipping", default=40.0, type=float,
                     help="Global gradient norm clip.")
+
+# Custom settings.
+parser.add_argument('--seed', type=int, default=0, help='Random seed')
+DEFAULT_ID = 'torchbeast'
+parser.add_argument('--id', default=DEFAULT_ID)
+parser.add_argument('--evaluation_interval', type=int, default=10000, metavar='EVAIL_STEPS',
+                    help='Number of training steps between evaluations')
+
+# Weights & Biases settings.
+DEFUALT_WANDB_ENTITY = 'augmented-frostbite'
+parser.add_argument('--wandb_entity', default=DEFUALT_WANDB_ENTITY)
+DEFAULT_WANDB_PROJECT = 'torchbeast-experiments'
+parser.add_argument('--wandb_project', default=DEFAULT_WANDB_PROJECT)
+SCRATCH_FOLDER = r'/misc/vlgscratch4/LakeGroup/guy/'
+DEFAULT_WANDB_DIR = SCRATCH_FOLDER  # wandb creates its own folder inside
+parser.add_argument('--wandb_dir', default=DEFAULT_WANDB_DIR)
+parser.add_argument('--wandb_omit-watch', action='store_true')
+parser.add_argument('--wandb_resume', action='store_true')
+
+
 # yapf: enable
 
 
@@ -139,7 +163,7 @@ def act(
         timings = prof.Timings()  # Keep track of how fast things are.
 
         gym_env = create_env(flags)
-        seed = actor_index ^ int.from_bytes(os.urandom(4), byteorder="little")
+        seed = actor_index ^ int.from_bytes(os.urandom(4), byteorder="little") + flags.seed
         gym_env.seed(seed)
         env = environment.Environment(gym_env)
         env_output = env.initial()
@@ -407,13 +431,35 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     ]
     logger.info("# Step\t%s", "\t".join(stat_keys))
 
+    # Load state from a checkpoint, if possible.
+    resume_checkpoint_path = checkpointpath
+    if 'resume_checkpoint_path' in flags:
+        resume_checkpoint_path = flags.resume_checkpoint_path
+
+    if os.path.exists(resume_checkpoint_path):
+        checkpoint_states = torch.load(
+            resume_checkpoint_path, map_location=flags.device
+        )
+        learner_model.load_state_dict(checkpoint_states["model_state_dict"])
+        optimizer.load_state_dict(checkpoint_states["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint_states["scheduler_state_dict"])
+        stats = checkpoint_states["stats"]
+        logging.info(f"Resuming preempted job, current stats:\n{stats}")
+
+    # Initialize actor model like learner model.
+    model.load_state_dict(learner_model.state_dict())
+
     step, stats = 0, {}
 
     def batch_and_learn(i, lock=threading.Lock()):
         """Thread target for the learning process."""
         nonlocal step, stats
         timings = prof.Timings()
-        while step < flags.total_steps:
+        steps = flags.total_steps
+        if 'train_steps' in flags:
+            steps = flags.train_steps
+
+        while step < steps:
             timings.reset()
             batch, agent_state = get_batch(
                 flags,
@@ -431,6 +477,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log = dict(step=step)
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
+
                 step += T * B
 
         if i == 0:
@@ -447,9 +494,13 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
         thread.start()
         threads.append(thread)
 
-    def checkpoint():
+    def checkpoint(path=None):
         if flags.disable_checkpoint:
             return
+
+        if path is None:
+            path = checkpointpath
+
         logging.info("Saving checkpoint to %s", checkpointpath)
         torch.save(
             {
@@ -458,13 +509,17 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 "scheduler_state_dict": scheduler.state_dict(),
                 "flags": vars(flags),
             },
-            checkpointpath,
+            path,
         )
 
     timer = timeit.default_timer
     try:
         last_checkpoint_time = timer()
-        while step < flags.total_steps:
+        steps = flags.total_steps
+        if 'train_steps' in flags:
+            steps = flags.train_steps
+
+        while step < steps:
             start_step = step
             start_time = timer()
             time.sleep(5)
@@ -502,7 +557,14 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             actor.join(timeout=1)
 
     checkpoint()
+    if wandb.run is not None and wandb.run.dir is not None:
+        save_path = os.path.join(wandb.run.dir, f'model-{step}.tar')
+        checkpoint(save_path)
+        flags.resume_checkpoint_path = save_path
+
     plogger.close()
+
+    return step
 
 
 def test(flags, num_episodes: int = 10):
@@ -540,6 +602,8 @@ def test(flags, num_episodes: int = 10):
     logging.info(
         "Average returns over %i steps: %.1f", num_episodes, sum(returns) / len(returns)
     )
+
+    return returns
 
 
 class AtariNet(nn.Module):
@@ -648,8 +712,101 @@ def create_env(flags):
     )
 
 
+def setup_wandb(flags):
+    flags.wandb_name = f'{flags.id}-{flags.seed}'
+
+    for wandb_key in ('WANDB_RESUME', 'WANDB_RUN_ID'):
+        if wandb_key in os.environ:
+            del os.environ[wandb_key]
+
+    if flags.wandb_resume:
+        api = wandb.Api()
+
+        original_run_id = None
+        resume_step = None
+        resume_checkpoint = None
+
+        existing_runs = api.runs(f'{flags.wandb_entity}/{flags.wandb_project}', {'$and': [{'config.id': str(flags.id)},
+                                                                                          {'config.seed': int(
+                                                                                              flags.seed)}]})
+
+        if len(existing_runs) > 1:
+            raise ValueError(
+                f'Found more than one matching run to id {flags.id} and seed {flags.seed}: {[r.id for r in existing_runs]}. Aborting... ')
+
+        elif len(existing_runs) == 1:
+            existing_run = existing_runs[0]
+            original_run_id = existing_run.id
+
+            history = existing_run.history(pandas=True, samples=1000)
+
+            # Verify there's actually a run to resume
+            if len(history) > 0:
+                checkpoint_index = -1
+                while np.isnan(history['steps'].iat[checkpoint_index]):
+                    checkpoint_index -= 1
+
+                resume_step = int(history['steps'].iat[checkpoint_index])
+
+                if resume_step >= flags.total_steps:
+                    print(
+                        f'resume_step ({resume_step}) is greater than or equal to total steps ({flags.total_steps}), nothing to do here...')
+                    sys.exit(0)
+
+                # Now that we now that resume_step is, we can load from there.
+                try:
+                    resume_checkpoint = existing_run.file(f'model-{resume_step}.tar')
+                    resume_checkpoint.download(replace=True)
+                except (AttributeError, wandb.CommError) as e:
+                    print('Failed to download most recent checkpoint, will not resume')
+
+        if original_run_id is None:
+            print(f'Failed to find run to resume for seed {flags.seed}, running from scratch')
+
+        elif resume_step is None:
+            print(f'Failed to find the correct resume timestamp for seed {flags.seed}, running from scratch')
+
+        elif resume_checkpoint is None:
+            print(f'Failed to find checkpoint to resume for seed {flags.seed}, running from scratch')
+
+        else:
+            os.environ['WANDB_RESUME'] = 'must'
+            os.environ['WANDB_RUN_ID'] = original_run_id
+
+            flags.resume_checkpoint_path = resume_checkpoint.name
+
+    for key in os.environ:
+        if 'WANDB' in key:
+            print(key, os.environ[key])
+
+    wandb.init(entity=flags.wandb_entity, project=flags.wandb_project, name=flags.wandb_name,
+               dir=flags.wandb_dir, config=vars(flags))
+    wandb.save(os.path.join(wandb.run.dir, '*.pth'))
+    wandb.save(os.path.join(wandb.run.dir, '*.tar'))
+
+
+def train_and_test(flags):
+    if flags.total_steps % flags.evaluation_interval != 0:
+        raise ValueError(f'The number of total steps ({flags.total_steps}) % the evaulation interval ({flags.evaluation_interval}) should be zero')
+
+    flags.train_steps = flags.evaluation_interval
+    total_step = 0
+
+    while total_step < flags.total_steps:
+        total_step = train(flags)
+        test_returns = test(flags)
+        wandb.log(dict(steps=total_step,  # human_hours=T * 4 / (60 * 60 * 60),
+                       rewards=test_returns,
+                       reward_mean=np.mean(test_returns),
+                       reward_std=np.std(test_returns)))
+
+
 def main(flags):
-    if flags.mode == "train":
+    setup_wandb(flags)
+
+    if flags.mode == 'train_and_test':
+        train_and_test(flags)
+    elif flags.mode == "train":
         train(flags)
     else:
         test(flags)
