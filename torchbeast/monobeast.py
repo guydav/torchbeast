@@ -797,9 +797,6 @@ def setup_wandb(flags):
 
 
 def train_and_test(flags):
-    if flags.total_steps % flags.evaluation_interval != 0:
-        raise ValueError(f'The number of total steps ({flags.total_steps}) % the evaulation interval ({flags.evaluation_interval}) should be zero')
-
     flags.train_steps = flags.evaluation_interval
 
     if 'current_step' not in flags:
@@ -808,7 +805,7 @@ def train_and_test(flags):
     while flags.current_step < flags.total_steps:
         flags.current_step += train(flags)
         test_returns = test(flags)
-        wandb.log(dict(steps=flags.total_step,  # human_hours=T * 4 / (60 * 60 * 60),
+        wandb.log(dict(steps=flags.current_step,  # human_hours=T * 4 / (60 * 60 * 60),
                        rewards=test_returns,
                        reward_mean=np.mean(test_returns),
                        reward_std=np.std(test_returns)))
