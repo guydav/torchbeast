@@ -211,5 +211,9 @@ class FileWriter:
             f.close()
 
     def _save_metadata(self) -> None:
+        print('\n' + '=' * 50 + '\n')
+        for key in self.metadata:
+            print(f'{key}:\t{self.metadata[key]}\n')
+        print('\n' + '=' * 50 + '\n')
         with open(self.paths["meta"], "w") as jsonfile:
             json.dump(self.metadata, jsonfile, indent=4, sort_keys=True)
