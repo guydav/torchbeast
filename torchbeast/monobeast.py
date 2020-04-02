@@ -342,6 +342,11 @@ def create_buffers(flags, obs_shape, num_actions) -> Buffers:
 def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     if flags.xpid is None:
         flags.xpid = "torchbeast-%s" % time.strftime("%Y%m%d-%H%M%S")
+
+    xp_args = flags.__dict__.copy()
+    if 'device' in xp_args and isinstance(xp_args['device'], torch.device):
+        xp_args['device'] = str(xp_args['device'])
+
     plogger = file_writer.FileWriter(
         xpid=flags.xpid, xp_args=flags.__dict__, rootdir=flags.savedir
     )
