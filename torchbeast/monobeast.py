@@ -46,7 +46,7 @@ parser = argparse.ArgumentParser(description="PyTorch Scalable Agent")
 parser.add_argument("--env", type=str, default="PongNoFrameskip-v4",
                     help="Gym environment.")
 parser.add_argument("--mode", default="train",
-                    choices=["train", "test", "test_render"],
+                    choices=["train", "test", "test_render", "train_and_test"],
                     help="Training or test mode.")
 DEFAULT_ID = 'torchbeast'
 parser.add_argument("--xpid", default=DEFAULT_ID,
