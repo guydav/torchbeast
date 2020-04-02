@@ -13,4 +13,4 @@ python3.7 -m torchbeast.monobeast \
      --num_threads 4 \
      --xpid "torchbeast-test" \
      --seed 300 \
-     --wandb-resume
+     --wandb_resume

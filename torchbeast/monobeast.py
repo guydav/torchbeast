@@ -110,7 +110,7 @@ parser.add_argument('--wandb_project', default=DEFAULT_WANDB_PROJECT)
 SCRATCH_FOLDER = r'/misc/vlgscratch4/LakeGroup/guy/'
 DEFAULT_WANDB_DIR = SCRATCH_FOLDER  # wandb creates its own folder inside
 parser.add_argument('--wandb_dir', default=DEFAULT_WANDB_DIR)
-parser.add_argument('--wandb_omit-watch', action='store_true')
+parser.add_argument('--wandb_omit_watch', action='store_true')
 parser.add_argument('--wandb_resume', action='store_true')
 
 
