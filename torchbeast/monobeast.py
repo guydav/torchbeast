@@ -541,9 +541,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             else:
                 mean_return = ""
             total_loss = stats.get("total_loss", float("inf"))
+            print_step = step
+            if 'current_step' in flags:
+                print_step += flags.current_step
             logging.info(
                 "Steps %i @ %.1f SPS. Loss %f. %sStats:\n%s",
-                step,
+                print_step,
                 sps,
                 total_loss,
                 mean_return,
@@ -778,6 +781,9 @@ def setup_wandb(flags):
             os.environ['WANDB_RESUME'] = 'must'
             os.environ['WANDB_RUN_ID'] = original_run_id
 
+            if resume_step is not None:
+                flags.current_step = resume_step
+
             flags.resume_checkpoint_path = resume_checkpoint.name
 
     for key in os.environ:
@@ -795,12 +801,14 @@ def train_and_test(flags):
         raise ValueError(f'The number of total steps ({flags.total_steps}) % the evaulation interval ({flags.evaluation_interval}) should be zero')
 
     flags.train_steps = flags.evaluation_interval
-    total_step = 0
 
-    while total_step < flags.total_steps:
-        total_step = train(flags)
+    if 'current_step' not in flags:
+        flags.current_step = 0
+
+    while flags.current_step < flags.total_steps:
+        flags.current_step += train(flags)
         test_returns = test(flags)
-        wandb.log(dict(steps=total_step,  # human_hours=T * 4 / (60 * 60 * 60),
+        wandb.log(dict(steps=flags.total_step,  # human_hours=T * 4 / (60 * 60 * 60),
                        rewards=test_returns,
                        reward_mean=np.mean(test_returns),
                        reward_std=np.std(test_returns)))
