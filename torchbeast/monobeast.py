@@ -55,7 +55,7 @@ parser.add_argument("--xpid", default=DEFAULT_ID,
 # Training settings.
 parser.add_argument("--disable_checkpoint", action="store_true",
                     help="Disable saving checkpoint.")
-parser.add_argument("--savedir", default="~/logs/torchbeast",
+parser.add_argument("--savedir", default="/scratch/gd1279/torchbeast",
                     help="Root dir where experiment data will be saved.")
 parser.add_argument("--num_actors", default=4, type=int, metavar="N",
                     help="Number of actors (default: 4).")
