@@ -348,7 +348,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
         xp_args['device'] = str(xp_args['device'])
 
     plogger = file_writer.FileWriter(
-        xpid=flags.xpid, xp_args=flags.__dict__, rootdir=flags.savedir
+        xpid=flags.xpid, xp_args=xp_args, rootdir=flags.savedir
     )
     checkpointpath = os.path.expandvars(
         os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
