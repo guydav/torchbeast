@@ -59,7 +59,7 @@ parser.add_argument("--savedir", default="~/logs/torchbeast",
                     help="Root dir where experiment data will be saved.")
 parser.add_argument("--num_actors", default=4, type=int, metavar="N",
                     help="Number of actors (default: 4).")
-parser.add_argument("--total_steps", default=100000, type=int, metavar="T",
+parser.add_argument("--total_steps", default=10000000, type=int, metavar="T",
                     help="Total environment steps to train for.")
 parser.add_argument("--batch_size", default=8, type=int, metavar="B",
                     help="Learner batch size.")
@@ -99,7 +99,7 @@ parser.add_argument("--grad_norm_clipping", default=40.0, type=float,
 
 # Custom settings.
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
-parser.add_argument('--evaluation_interval', type=int, default=10000, metavar='EVAIL_STEPS',
+parser.add_argument('--evaluation_interval', type=int, default=500000,
                     help='Number of training steps between evaluations')
 
 # Weights & Biases settings.
