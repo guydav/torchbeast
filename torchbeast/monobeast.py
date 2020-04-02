@@ -48,8 +48,9 @@ parser.add_argument("--env", type=str, default="PongNoFrameskip-v4",
 parser.add_argument("--mode", default="train",
                     choices=["train", "test", "test_render"],
                     help="Training or test mode.")
-parser.add_argument("--xpid", default=None,
-                    help="Experiment id (default: None).")
+DEFAULT_ID = 'torchbeast'
+parser.add_argument("--xpid", default=DEFAULT_ID,
+                    help="Experiment id (default: 'torchbeast').")
 
 # Training settings.
 parser.add_argument("--disable_checkpoint", action="store_true",
@@ -98,8 +99,6 @@ parser.add_argument("--grad_norm_clipping", default=40.0, type=float,
 
 # Custom settings.
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
-DEFAULT_ID = 'torchbeast'
-parser.add_argument('--id', default=DEFAULT_ID)
 parser.add_argument('--evaluation_interval', type=int, default=10000, metavar='EVAIL_STEPS',
                     help='Number of training steps between evaluations')
 
@@ -713,7 +712,7 @@ def create_env(flags):
 
 
 def setup_wandb(flags):
-    flags.wandb_name = f'{flags.id}-{flags.seed}'
+    flags.wandb_name = f'{flags.xpid}-{flags.seed}'
 
     for wandb_key in ('WANDB_RESUME', 'WANDB_RUN_ID'):
         if wandb_key in os.environ:
@@ -726,13 +725,13 @@ def setup_wandb(flags):
         resume_step = None
         resume_checkpoint = None
 
-        existing_runs = api.runs(f'{flags.wandb_entity}/{flags.wandb_project}', {'$and': [{'config.id': str(flags.id)},
+        existing_runs = api.runs(f'{flags.wandb_entity}/{flags.wandb_project}', {'$and': [{'config.id': str(flags.xpid)},
                                                                                           {'config.seed': int(
                                                                                               flags.seed)}]})
 
         if len(existing_runs) > 1:
             raise ValueError(
-                f'Found more than one matching run to id {flags.id} and seed {flags.seed}: {[r.id for r in existing_runs]}. Aborting... ')
+                f'Found more than one matching run to id {flags.xpid} and seed {flags.seed}: {[r.id for r in existing_runs]}. Aborting... ')
 
         elif len(existing_runs) == 1:
             existing_run = existing_runs[0]
